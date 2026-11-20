@@ -53,6 +53,32 @@ describe('application registry API server configuration', () => {
     )
   })
 
+  test('supports a literal loopback CV URL for local PDF rendering', async () => {
+    const configuration = await readWith({
+      CV_LOCAL_PUBLIC_BASE_URL: 'http://localhost:4381/c/',
+    })
+    expect(configuration.publication.publicBaseUrl.href).toBe(
+      'http://localhost:4381/c/'
+    )
+  })
+
+  test('rejects insecure remote overrides and ambiguous publication URLs', async () => {
+    for (const value of [
+      'http://cv.example.test/c/',
+      'http://localhost.evil.test/c/',
+      'http://user:password@localhost/c/',
+      'http://localhost/c/?query=value',
+      'http://localhost/c/#fragment',
+      'http://localhost/other/',
+      'file:///c/',
+      'not-a-url',
+    ]) {
+      await expect(
+        readWith({ CV_LOCAL_PUBLIC_BASE_URL: value })
+      ).rejects.toThrow('CV_LOCAL_PUBLIC_BASE_URL')
+    }
+  })
+
   test('rejects malformed URLs and excessive PostgreSQL pools', async () => {
     await expect(readWith({ MINIO_ENDPOINT: 'not-a-url' })).rejects.toThrow(
       'MINIO_ENDPOINT'

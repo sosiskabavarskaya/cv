@@ -5,6 +5,19 @@ the Nomad/Consul/Vault cluster. Cloudflare remains in front for DNS, Tunnel,
 Access, CDN caching, and analytics; no application code runs on Cloudflare
 Workers or Pages.
 
+## Development documentation
+
+- [AGENTS.md](AGENTS.md): agent workflow, code boundaries, commands, and verification.
+- [Architecture.md](Architecture.md): components, data ownership, preparation,
+  publication/PDF flows, and local/production topology.
+
+## Local Docker Compose
+
+For an isolated localhost installation, including migrations, object-store and
+JetStream initialization, the CV renderer and PDF worker, see
+[docker/local/README.ru.md](docker/local/README.ru.md). AI generation still runs
+in the native Electron client through the local Codex installation.
+
 ## Runtime applications
 
 - `apps/application-registry-api`: bearer-authenticated Bun API exposed at
