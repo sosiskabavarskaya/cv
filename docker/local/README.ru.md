@@ -142,8 +142,9 @@ REGISTRY_API_TOKEN=cv-local-registry-token \
 ```
 
 Подставьте порты и токен из `.env`. `CV_LOCAL_DEVELOPMENT=1` разрешает
-loopback HTTP origin для этой desktop-сборки; обычные production-сборки
-сохраняют требование HTTPS. При смене окружения пересоберите desktop-клиент.
+loopback HTTP origin для всей локальной цепочки: предварительной web-сборки
+и desktop renderer. Без флага сборки сохраняют требование HTTPS. Флаг и origins
+учитываются в Nx cache; при смене окружения запустите сборку заново.
 
 На WSL предусмотрена нативная Windows-сборка:
 

@@ -387,6 +387,11 @@ Chromium и PDF worker используют `network_mode: service:cv`. Их loc
 в браузере хоста и в Chromium. CDP не опубликован на хост. Порты API, Registry,
 CV и MinIO console публикуются только на 127.0.0.1.
 
+При native desktop build Nx сначала собирает общий web-проект, затем desktop
+renderer. Явный `CV_LOCAL_DEVELOPMENT=1` разрешает loopback origin на обеих
+стадиях. Build targets учитывают этот флаг и Vite origins в ключе Nx cache;
+без флага сохраняется требование HTTPS вне dev mode.
+
 Workspace image содержит Node/Bun, зависимости, собранные библиотеки и Chromium.
 В сборку включён `color-scheme`, необходимый renderer. MinIO собирается из
 проверяемого по checksum архива закреплённого официального коммита; зависимость

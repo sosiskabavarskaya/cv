@@ -57,7 +57,7 @@ docker compose ps -a
 образ: после изменений серверного кода нужен `docker compose up --build -d`.
 
 Нативный desktop требует Node/Bun и графическую сессию. Локальное HTTP-превью
-разрешается только явным `CV_LOCAL_DEVELOPMENT=1` при сборке desktop; также задай
+разрешается явным `CV_LOCAL_DEVELOPMENT=1` для web/desktop цепочки сборки; задай
 `VITE_CV_WEB_ORIGIN` с портом CV. Используй команды из локальной инструкции и
 [desktop README](apps/application-registry-desktop/README.md).
 
