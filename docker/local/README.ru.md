@@ -41,6 +41,12 @@ docker compose ps -a
 
 На первом экране панели укажите origin `http://localhost:3001` и значение
 `REGISTRY_API_TOKEN` из `.env`. По умолчанию это `cv-local-registry-token`.
+Native desktop требует `REGISTRY_API_URL` и `REGISTRY_API_TOKEN` вместе.
+Bun автоматически читает `.env`, поэтому наличие одного токена без URL приводит
+к `The Registry environment configuration is invalid`. В примере заданы оба
+значения; для старого `.env` добавьте `REGISTRY_API_URL=http://localhost:3001`.
+Если меняете `REGISTRY_API_PORT`, обновите и этот URL.
+
 Для MinIO используются `MINIO_ACCESS_KEY_ID` и `MINIO_SECRET_ACCESS_KEY` из
 этого же файла. Учётные данные из примера предназначены для локального стенда.
 
