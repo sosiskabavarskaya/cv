@@ -87,12 +87,37 @@ const corsAllowedOrigins = Config.nonEmptyString(
   Effect.map((origins) => [...new Set(origins)])
 )
 
+// A loopback override lets Docker Compose use the same literal URL in the
+// host browser, the CV renderer, and Chromium. Deployed URLs still default to HTTPS.
 const publicCvBaseUrl = Config.nonEmptyString('CV_WEB_HOST').pipe(
   Effect.flatMap((host) =>
+    Config.nonEmptyString('CV_LOCAL_PUBLIC_BASE_URL').pipe(
+      Config.withDefault(`https://${host}/c/`)
+    )
+  ),
+  Effect.flatMap((value) =>
     Effect.try({
-      try: () => new URL(`https://${host}/c/`),
+      try: () => {
+        const base = new URL(value)
+        const localHttp =
+          base.protocol === 'http:' &&
+          ['localhost', '127.0.0.1', '[::1]'].includes(base.hostname)
+        if (
+          (!localHttp && base.protocol !== 'https:') ||
+          base.username !== '' ||
+          base.password !== '' ||
+          base.pathname !== '/c/' ||
+          base.search !== '' ||
+          base.hash !== ''
+        ) {
+          throw new Error('Invalid public CV base URL.')
+        }
+        return base
+      },
       catch: () =>
-        new Error('CV_WEB_HOST must produce a valid public HTTP(S) URL.'),
+        new Error(
+          'CV_LOCAL_PUBLIC_BASE_URL must use HTTPS or loopback HTTP and have only the /c/ path.'
+        ),
     })
   )
 )

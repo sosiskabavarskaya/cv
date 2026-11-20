@@ -1,0 +1,230 @@
+name: cv-local
+
+x-database: &database
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  POSTGRES_DATABASE: cv
+  POSTGRES_USER: cv
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cv-local-postgres-password}
+
+x-storage: &storage
+  MINIO_ENDPOINT: http://minio:9000
+  MINIO_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY_ID:-cv-local}
+  MINIO_SECRET_ACCESS_KEY: ${MINIO_SECRET_ACCESS_KEY:-cv-local-minio-password}
+  MINIO_FACTS_BUCKET: cv-facts
+  MINIO_OBJECTS_BUCKET: cv-objects
+  MINIO_REGION: us-east-1
+  MINIO_FORCE_PATH_STYLE: "true"
+
+x-messaging: &messaging
+  NATS_SERVER: nats://nats:4222
+  NATS_USER: cv
+  NATS_PASSWORD: ${NATS_PASSWORD:-cv-local-nats-password}
+
+x-app: &app
+  image: cv-local-workspace:dev
+  build:
+    context: .
+    dockerfile: docker/local/Dockerfile
+  init: false
+
+services:
+  postgres:
+    image: postgres:17.5-alpine
+    environment:
+      POSTGRES_DB: cv
+      POSTGRES_USER: cv
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cv-local-postgres-password}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U cv -d cv']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  minio:
+    image: cv-local-minio:dev
+    build:
+      context: .
+      dockerfile: docker/local/Minio.Dockerfile
+    command: [server, /data, --console-address, ':9001']
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY_ID:-cv-local}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_ACCESS_KEY:-cv-local-minio-password}
+    ports:
+      - '127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001'
+    volumes:
+      - minio-data:/data
+    restart: unless-stopped
+
+  nats:
+    image: nats:2.14.3-alpine
+    environment:
+      NATS_PASSWORD: ${NATS_PASSWORD:-cv-local-nats-password}
+    entrypoint: [/bin/sh, -ec]
+    command: ['exec nats-server -js -sd /data --user cv --pass "$$NATS_PASSWORD"']
+    volumes:
+      - nats-data:/data
+    restart: unless-stopped
+
+  bootstrap:
+    <<: *app
+    command: [node, docker/local/bootstrap.mjs]
+    environment:
+      <<: [*storage, *messaging]
+    depends_on:
+      minio:
+        condition: service_started
+      nats:
+        condition: service_started
+
+  migrate:
+    <<: *app
+    command: [sh, apps/application-registry-api/scripts/run-migrations.sh]
+    environment:
+      <<: *database
+      MIGRATIONS_ROOT: /workspace/libs/application-registry/entity/drizzle
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    command: [bun, apps/application-registry-api/dist/main.js]
+    environment:
+      <<: [*database, *storage, *messaging]
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: "3001"
+      REGISTRY_API_TOKEN: ${REGISTRY_API_TOKEN:-cv-local-registry-token}
+      FACTS_PUBLISH_TOKEN: ${FACTS_PUBLISH_TOKEN:-cv-local-facts-publish-token}
+      REGISTRY_CORS_ALLOWED_ORIGINS: http://localhost:${REGISTRY_PORT:-4300},http://127.0.0.1:${REGISTRY_PORT:-4300}
+      CV_LOCAL_PUBLIC_BASE_URL: http://localhost:${CV_PORT:-4381}/c/
+      CV_WEB_HOST: localhost:${CV_PORT:-4381}
+      CLOUDFLARE_ANALYTICS_API_TOKEN: local-unused
+      CLOUDFLARE_ZONE_ID: local-unused
+    ports:
+      - '127.0.0.1:${REGISTRY_API_PORT:-3001}:3001'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, bun, -e, 'const r = await fetch("http://127.0.0.1:3001/api/registry/health", {headers: {Authorization: `Bearer $${process.env.REGISTRY_API_TOKEN}`}}); if (!r.ok) process.exit(1)']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  registry:
+    <<: *app
+    command: [bunx, vite, --config, apps/application-registry/vite.config.ts, --host, 0.0.0.0, --port, '${REGISTRY_PORT:-4300}']
+    environment:
+      VITE_REGISTRY_API_URL: http://localhost:${REGISTRY_API_PORT:-3001}
+      VITE_CV_WEB_ORIGIN: http://localhost:${CV_PORT:-4381}
+    ports:
+      - '127.0.0.1:${REGISTRY_PORT:-4300}:${REGISTRY_PORT:-4300}'
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, 'fetch("http://127.0.0.1:${REGISTRY_PORT:-4300}").then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  cv:
+    <<: *app
+    command: [bun, run, --cwd, apps/cv, dev, --port, '${CV_PORT:-4381}']
+    environment:
+      CV_PUBLIC_RESOLVER_URL: http://api:3001
+      CV_REGISTRY_ORIGIN: http://localhost:${REGISTRY_PORT:-4300}
+      CV_FIXTURE_MODE: ${CV_FIXTURE_MODE:-0}
+      CV_FIXTURE_PUBLIC_URL: http://localhost:${CV_PORT:-4381}/c/fixture
+    ports:
+      - '127.0.0.1:${CV_PORT:-4381}:${CV_PORT:-4381}'
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, 'fetch("http://127.0.0.1:${CV_PORT:-4381}/c/_internal/health").then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))']
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  chromium:
+    <<: *app
+    command: [node, docker/local/chromium.mjs]
+    network_mode: service:cv
+    shm_size: 1gb
+    depends_on:
+      cv:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, 'fetch("http://127.0.0.1:9222/json/version").then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  pdf-worker:
+    <<: *app
+    command: [node, apps/application-registry-pdf-worker/dist/main.mjs]
+    network_mode: service:cv
+    environment:
+      <<: [*database, *storage, *messaging]
+      BROWSER_CDP_URL: http://127.0.0.1:9222
+      POSTGRES_MAX_CONNECTIONS: "3"
+    depends_on:
+      chromium:
+        condition: service_healthy
+      bootstrap:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  facts:
+    <<: *app
+    profiles: [tools]
+    entrypoint: [/usr/bin/tini, --, bun, tools/facts-release/src/cli.ts]
+    command: [publish, --bundle, /imports/facts.bundle.json, --registry-url, 'http://api:3001']
+    environment:
+      FACTS_PUBLISH_TOKEN: ${FACTS_PUBLISH_TOKEN:-cv-local-facts-publish-token}
+    volumes:
+      - type: bind
+        source: ${FACTS_IMPORT_DIR:-./.cv-work/imports}
+        target: /imports
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      api:
+        condition: service_healthy
+
+  smoke:
+    <<: *app
+    profiles: [tools]
+    command: [node, docker/local/smoke.mjs]
+    network_mode: service:cv
+    environment:
+      <<: [*database, *storage, *messaging]
+      REGISTRY_API_TOKEN: ${REGISTRY_API_TOKEN:-cv-local-registry-token}
+      REGISTRY_PORT: ${REGISTRY_PORT:-4300}
+    depends_on:
+      registry:
+        condition: service_healthy
+      chromium:
+        condition: service_healthy
+      pdf-worker:
+        condition: service_started
+
+volumes:
+  postgres-data:
+  minio-data:
+  nats-data:

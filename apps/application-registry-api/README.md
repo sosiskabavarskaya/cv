@@ -25,6 +25,11 @@ Runtime dependencies:
 - `CLOUDFLARE_ANALYTICS_API_TOKEN`, `CLOUDFLARE_ZONE_ID`, and `CV_WEB_HOST`.
   The Cloudflare token needs analytics-read permissions only.
 
+For the local Docker Compose stack, `CV_LOCAL_PUBLIC_BASE_URL` overrides the
+usual `https://${CV_WEB_HOST}/c/` publication base. It accepts HTTPS or loopback
+HTTP and requires exactly `/c/`, without credentials, query, or fragment.
+See [the local setup guide](../../docker/local/README.ru.md).
+
 Build and verify:
 
 ```sh
