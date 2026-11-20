@@ -41,6 +41,12 @@ docker compose ps -a
 
 На первом экране панели укажите origin `http://localhost:3001` и значение
 `REGISTRY_API_TOKEN` из `.env`. По умолчанию это `cv-local-registry-token`.
+Native desktop требует `REGISTRY_API_URL` и `REGISTRY_API_TOKEN` вместе.
+Bun автоматически читает `.env`, поэтому наличие одного токена без URL приводит
+к `The Registry environment configuration is invalid`. В примере заданы оба
+значения; для старого `.env` добавьте `REGISTRY_API_URL=http://localhost:3001`.
+Если меняете `REGISTRY_API_PORT`, обновите и этот URL.
+
 Для MinIO используются `MINIO_ACCESS_KEY_ID` и `MINIO_SECRET_ACCESS_KEY` из
 этого же файла. Учётные данные из примера предназначены для локального стенда.
 
@@ -142,8 +148,9 @@ REGISTRY_API_TOKEN=cv-local-registry-token \
 ```
 
 Подставьте порты и токен из `.env`. `CV_LOCAL_DEVELOPMENT=1` разрешает
-loopback HTTP origin для этой desktop-сборки; обычные production-сборки
-сохраняют требование HTTPS. При смене окружения пересоберите desktop-клиент.
+loopback HTTP origin для всей локальной цепочки: предварительной web-сборки
+и desktop renderer. Без флага сборки сохраняют требование HTTPS. Флаг и origins
+учитываются в Nx cache; при смене окружения запустите сборку заново.
 
 На WSL предусмотрена нативная Windows-сборка:
 

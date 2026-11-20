@@ -28,8 +28,9 @@ export default defineConfig(({ mode }) => {
   const environment = loadEnv(mode, process.cwd(), 'VITE_')
   const cvWebOrigin = normalizeCvWebOrigin(
     environment.VITE_CV_WEB_ORIGIN?.trim() || defaultCvWebOrigin,
-    mode === 'development' ||
-      (mode === 'desktop' && process.env.CV_LOCAL_DEVELOPMENT === '1')
+    // Nx builds the shared web app before the desktop renderer. The explicit
+    // local opt-in must apply to both stages of that dependency chain.
+    mode === 'development' || process.env.CV_LOCAL_DEVELOPMENT === '1'
   )
 
   return {
